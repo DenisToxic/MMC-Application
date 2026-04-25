@@ -1,0 +1,176 @@
+@model MMC_Backend.Models.DashboardViewModel
+@{
+    Layout = null;
+    var latest = Model.LatestTelemetry.FirstOrDefault();
+    var activeAlarmCount = Model.ActiveAlarms.Count;
+    var statusClass = activeAlarmCount > 0 ? "status-alarm" : latest is null ? "status-idle" : "status-running";
+    var statusText = activeAlarmCount > 0 ? "Alarm" : latest is null ? "No data" : "Running";
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="5" />
+    <title>Industrial Test Cell Monitor</title>
+    <link rel="stylesheet" href="/css/dashboard.css" />
+</head>
+<body>
+    <header class="topbar">
+        <div class="title-block">
+            <h1>Test Cell Monitor</h1>
+            <span>Line: MMC-Demo / View: Operator</span>
+        </div>
+        <div class="header-meta">
+            <span>Refresh 5s</span>
+            <span>@Model.RenderedAtUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC</span>
+        </div>
+    </header>
+
+    <main>
+        <section class="status-strip" aria-label="Machine status">
+            <div class="status-cell state-cell @statusClass">
+                <span>System state</span>
+                <strong>@statusText</strong>
+            </div>
+            <div class="status-cell">
+                <span>Station</span>
+                <strong>@(latest?.StationId ?? "-")</strong>
+            </div>
+            <div class="status-cell">
+                <span>Device</span>
+                <strong>@(latest?.DeviceId ?? "-")</strong>
+            </div>
+            <div class="status-cell">
+                <span>Temp</span>
+                <strong>@(latest is null ? "-" : $"{latest.TemperatureC:F1} C")</strong>
+            </div>
+            <div class="status-cell">
+                <span>Vibration</span>
+                <strong>@(latest is null ? "-" : $"{latest.VibrationMmS:F1} mm/s")</strong>
+            </div>
+            <div class="status-cell">
+                <span>Load</span>
+                <strong>@(latest is null ? "-" : $"{latest.LoadPercent}%")</strong>
+            </div>
+            <div class="status-cell">
+                <span>Alarms</span>
+                <strong>@activeAlarmCount</strong>
+            </div>
+        </section>
+
+        <div class="work-grid">
+            <section class="panel alarm-panel">
+                <div class="section-title">
+                    <h2>Active alarms</h2>
+                    <span>@activeAlarmCount active</span>
+                </div>
+                @if (Model.ActiveAlarms.Count == 0)
+                {
+                    <p class="empty">No active alarms.</p>
+                }
+                else
+                {
+                    <table class="compact-table">
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Station</th>
+                                <th>Text</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var alarm in Model.ActiveAlarms)
+                            {
+                                <tr>
+                                    <td class="alarm-code">@alarm.AlarmCode</td>
+                                    <td>@alarm.StationId / @alarm.DeviceId</td>
+                                    <td>@alarm.AlarmText</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+
+            <section class="panel">
+                <div class="section-title">
+                    <h2>Station summary</h2>
+                    <span>@Model.StationSummaries.Count stations</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Station</th>
+                                <th>Device</th>
+                                <th>Status</th>
+                                <th>Cycles</th>
+                                <th>Pass</th>
+                                <th>Fail</th>
+                                <th>Pass rate</th>
+                                <th>Last seen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var station in Model.StationSummaries)
+                            {
+                                <tr>
+                                    <td>@station.StationId</td>
+                                    <td>@station.DeviceId</td>
+                                    <td><span class="status-text">@station.Status</span></td>
+                                    <td>@station.TotalCycles</td>
+                                    <td>@station.PassCount</td>
+                                    <td>@station.FailCount</td>
+                                    <td>@station.PassRatePercent.ToString("F1")%</td>
+                                    <td>@(station.LastSeenUtc?.ToString("HH:mm:ss") ?? "-")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <section class="panel">
+            <div class="section-title">
+                <h2>Recent trace records</h2>
+                <span>Append-only telemetry log</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Received</th>
+                            <th>Station</th>
+                            <th>Device</th>
+                            <th>Cycle</th>
+                            <th>Result</th>
+                            <th>Temp</th>
+                            <th>Vibration</th>
+                            <th>Load</th>
+                            <th>Alarm</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var record in Model.RecentTelemetry)
+                        {
+                            <tr>
+                                <td>@record.ReceivedAtUtc.ToString("HH:mm:ss")</td>
+                                <td>@record.StationId</td>
+                                <td>@record.DeviceId</td>
+                                <td>@record.CycleCount</td>
+                                <td>@record.TestResult</td>
+                                <td>@record.TemperatureC.ToString("F1") C</td>
+                                <td>@record.VibrationMmS.ToString("F1")</td>
+                                <td>@record.LoadPercent%</td>
+                                <td>@(record.AlarmCode ?? "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

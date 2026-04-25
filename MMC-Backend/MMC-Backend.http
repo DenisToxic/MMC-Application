@@ -1,0 +1,37 @@
+@MMC_Backend_HostAddress = http://localhost:5000
+
+GET {{MMC_Backend_HostAddress}}/api/telemetry
+Accept: application/json
+
+###
+
+POST {{MMC_Backend_HostAddress}}/api/telemetry
+Content-Type: application/json
+
+{
+  "deviceId": "ESP-001",
+  "stationId": "TEST-CELL-01",
+  "cycleCount": 42,
+  "uptimeMs": 12345,
+  "temperatureC": 24.8,
+  "vibrationMmS": 1.2,
+  "loadPercent": 47,
+  "testResult": "Pass",
+  "alarmCode": null,
+  "alarmText": null
+}
+
+###
+
+GET {{MMC_Backend_HostAddress}}/api/telemetry/latest
+Accept: application/json
+
+###
+
+GET {{MMC_Backend_HostAddress}}/api/alarms/active
+Accept: application/json
+
+###
+
+GET {{MMC_Backend_HostAddress}}/api/stations/summary
+Accept: application/json
