@@ -20,24 +20,57 @@ public class TelemetryService : ITelemetryService
     {
         var now = DateTime.UtcNow;
         var thresholdAlarm = EvaluateThresholdAlarm(request, now);
+        var deviceId = request.DeviceId!.Trim();
+        var stationId = request.StationId!.Trim();
+        var alarmCode = FirstNonBlank(request.AlarmCode, thresholdAlarm?.AlarmCode);
+        var alarmText = FirstNonBlank(request.AlarmText, thresholdAlarm?.AlarmText);
+        var newState = EvaluateMachineState(request, alarmCode);
+
+        var state = await _db.StationStates
+            .SingleOrDefaultAsync(x => x.StationId == stationId && x.DeviceId == deviceId, cancellationToken);
+
+        var previousState = state is null ? MachineState.Offline : ApplyOfflineWindow(state, now);
+        var previousAlarmCode = state?.LastAlarmCode;
+        var previousCycleCount = state?.LastCycleCount ?? 0;
 
         var record = new TelemetryRecord
         {
-            DeviceId = request.DeviceId!.Trim(),
-            StationId = request.StationId!.Trim(),
+            DeviceId = deviceId,
+            StationId = stationId,
             CycleCount = request.CycleCount,
             UptimeMs = request.UptimeMs,
             TemperatureC = request.TemperatureC,
             VibrationMmS = request.VibrationMmS,
             LoadPercent = request.LoadPercent,
             TestResult = request.TestResult,
-            AlarmCode = FirstNonBlank(request.AlarmCode, thresholdAlarm?.AlarmCode),
-            AlarmText = FirstNonBlank(request.AlarmText, thresholdAlarm?.AlarmText),
+            AlarmCode = alarmCode,
+            AlarmText = alarmText,
             DeviceTimestampUtc = request.DeviceTimestampUtc,
             ReceivedAtUtc = now
         };
 
         _db.TelemetryRecords.Add(record);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        if (state is null)
+        {
+            state = new StationState
+            {
+                DeviceId = deviceId,
+                StationId = stationId
+            };
+            _db.StationStates.Add(state);
+        }
+
+        state.CurrentState = newState;
+        state.LatestTelemetryRecordId = record.Id;
+        state.LastCycleCount = request.CycleCount;
+        state.LastAlarmCode = alarmCode;
+        state.LastSeenUtc = now;
+        state.UpdatedAtUtc = now;
+
+        AddProductionEvents(record, previousState, newState, previousAlarmCode, previousCycleCount, thresholdAlarm, now);
+
         await _db.SaveChangesAsync(cancellationToken);
 
         return record;
@@ -56,28 +89,56 @@ public class TelemetryService : ITelemetryService
 
     public async Task<IReadOnlyList<TelemetryRecord>> GetLatestAsync(CancellationToken cancellationToken)
     {
-        var records = await _db.TelemetryRecords
+        var latestRecordIds = await _db.StationStates
             .AsNoTracking()
-            .OrderByDescending(x => x.ReceivedAtUtc)
+            .Where(x => x.LatestTelemetryRecordId != null)
+            .Select(x => x.LatestTelemetryRecordId!.Value)
             .ToListAsync(cancellationToken);
 
-        return records
-            .GroupBy(x => new { x.StationId, x.DeviceId })
-            .Select(x => x.First())
+        return await _db.TelemetryRecords
+            .AsNoTracking()
+            .Where(x => latestRecordIds.Contains(x.Id))
             .OrderBy(x => x.StationId)
             .ThenBy(x => x.DeviceId)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StationState>> GetCurrentStatesAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var states = await _db.StationStates
+            .AsNoTracking()
+            .OrderBy(x => x.StationId)
+            .ThenBy(x => x.DeviceId)
+            .ToListAsync(cancellationToken);
+
+        return states
+            .Select(x => new StationState
+            {
+                DeviceId = x.DeviceId,
+                StationId = x.StationId,
+                CurrentState = ApplyOfflineWindow(x, now),
+                LatestTelemetryRecordId = x.LatestTelemetryRecordId,
+                LastCycleCount = x.LastCycleCount,
+                LastAlarmCode = x.LastAlarmCode,
+                LastSeenUtc = x.LastSeenUtc,
+                UpdatedAtUtc = x.UpdatedAtUtc
+            })
             .ToList();
     }
 
     public async Task<IReadOnlyList<AlarmState>> GetActiveAlarmsAsync(CancellationToken cancellationToken)
     {
         var latest = await GetLatestAsync(cancellationToken);
+        var stateByStation = (await GetCurrentStatesAsync(cancellationToken))
+            .ToDictionary(x => (x.StationId, x.DeviceId));
         var now = DateTime.UtcNow;
         var alarms = new List<AlarmState>();
 
         foreach (var record in latest)
         {
-            if (now - record.ReceivedAtUtc > TimeSpan.FromSeconds(_options.OfflineAfterSeconds))
+            var state = stateByStation[(record.StationId, record.DeviceId)];
+            if (state.CurrentState == MachineState.Offline)
             {
                 alarms.Add(new AlarmState
                 {
@@ -109,7 +170,8 @@ public class TelemetryService : ITelemetryService
             .OrderByDescending(x => x.ReceivedAtUtc)
             .ToListAsync(cancellationToken);
 
-        var now = DateTime.UtcNow;
+        var states = (await GetCurrentStatesAsync(cancellationToken))
+            .ToDictionary(x => (x.StationId, x.DeviceId));
 
         return records
             .GroupBy(x => new { x.StationId, x.DeviceId })
@@ -120,6 +182,7 @@ public class TelemetryService : ITelemetryService
                 var failCount = group.Count(x => x.TestResult == TestResult.Fail);
                 var completed = passCount + failCount;
                 var lastAlarm = group.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.AlarmCode));
+                var state = states[(latest.StationId, latest.DeviceId)];
 
                 return new StationSummary
                 {
@@ -129,16 +192,107 @@ public class TelemetryService : ITelemetryService
                     PassCount = passCount,
                     FailCount = failCount,
                     PassRatePercent = completed == 0 ? 0 : Math.Round(passCount * 100.0 / completed, 1),
-                    LastSeenUtc = latest.ReceivedAtUtc,
+                    LastSeenUtc = state.LastSeenUtc,
                     LastAlarmCode = lastAlarm?.AlarmCode,
-                    Status = now - latest.ReceivedAtUtc > TimeSpan.FromSeconds(_options.OfflineAfterSeconds)
-                        ? "Offline"
-                        : EvaluateThresholdAlarms(latest, now).Any() ? "Alarm" : "Running"
+                    State = state.CurrentState
                 };
             })
             .OrderBy(x => x.StationId)
             .ThenBy(x => x.DeviceId)
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<ProductionEvent>> GetRecentEventsAsync(int limit, CancellationToken cancellationToken)
+    {
+        var boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await _db.ProductionEvents
+            .AsNoTracking()
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    private void AddProductionEvents(
+        TelemetryRecord record,
+        MachineState previousState,
+        MachineState newState,
+        string? previousAlarmCode,
+        long previousCycleCount,
+        AlarmState? thresholdAlarm,
+        DateTime now)
+    {
+        if (previousState != newState)
+        {
+            AddEvent(record, ProductionEventType.StateChanged, "STATE_CHANGED", $"State changed from {previousState} to {newState}.", now, previousState, newState);
+        }
+
+        if (previousState == MachineState.Offline && newState != MachineState.Offline)
+        {
+            AddEvent(record, ProductionEventType.DeviceReconnected, "DEVICE_RECONNECTED", "Telemetry stream restored.", now, previousState, newState);
+        }
+
+        if (!string.IsNullOrWhiteSpace(record.AlarmCode) && record.AlarmCode != previousAlarmCode)
+        {
+            AddEvent(record, ProductionEventType.AlarmRaised, record.AlarmCode, record.AlarmText ?? "Device reported an alarm.", now, previousState, newState);
+        }
+
+        if (thresholdAlarm is not null)
+        {
+            AddEvent(record, ProductionEventType.ThresholdViolation, thresholdAlarm.AlarmCode, thresholdAlarm.AlarmText, now, previousState, newState);
+        }
+
+        if (record.CycleCount > previousCycleCount && record.TestResult is TestResult.Pass or TestResult.Fail)
+        {
+            AddEvent(record, ProductionEventType.TestCompleted, $"TEST_{record.TestResult.ToString().ToUpperInvariant()}", $"Cycle {record.CycleCount} completed with result {record.TestResult}.", now, previousState, newState);
+        }
+    }
+
+    private void AddEvent(
+        TelemetryRecord record,
+        ProductionEventType eventType,
+        string eventCode,
+        string message,
+        DateTime occurredAtUtc,
+        MachineState? previousState = null,
+        MachineState? newState = null)
+    {
+        _db.ProductionEvents.Add(new ProductionEvent
+        {
+            DeviceId = record.DeviceId,
+            StationId = record.StationId,
+            EventType = eventType,
+            EventCode = eventCode,
+            Message = message,
+            PreviousState = previousState,
+            NewState = newState,
+            TelemetryRecordId = record.Id,
+            OccurredAtUtc = occurredAtUtc
+        });
+    }
+
+    private MachineState ApplyOfflineWindow(StationState state, DateTime now)
+    {
+        return now - state.LastSeenUtc > TimeSpan.FromSeconds(_options.OfflineAfterSeconds)
+            ? MachineState.Offline
+            : state.CurrentState;
+    }
+
+    private MachineState EvaluateMachineState(TelemetryIngestRequest request, string? alarmCode)
+    {
+        if (request.MaintenanceMode)
+        {
+            return MachineState.Maintenance;
+        }
+
+        if (!string.IsNullOrWhiteSpace(alarmCode) || request.TestResult == TestResult.Fail)
+        {
+            return MachineState.Fault;
+        }
+
+        return request.Heartbeat && (request.TestResult == TestResult.Running || request.LoadPercent > 0)
+            ? MachineState.Running
+            : MachineState.Idle;
     }
 
     private AlarmState? EvaluateThresholdAlarm(TelemetryIngestRequest request, DateTime now)

@@ -10,5 +10,7 @@ public class DashboardViewModel
 
     public IReadOnlyList<StationSummary> StationSummaries { get; set; } = [];
 
+    public IReadOnlyList<ProductionEvent> RecentEvents { get; set; } = [];
+
     public DateTime RenderedAtUtc { get; set; }
 }

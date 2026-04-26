@@ -18,5 +18,7 @@ public class StationSummary
 
     public string? LastAlarmCode { get; set; }
 
-    public string Status { get; set; } = "Unknown";
+    public MachineState State { get; set; } = MachineState.Offline;
+
+    public string Status => State.ToString();
 }

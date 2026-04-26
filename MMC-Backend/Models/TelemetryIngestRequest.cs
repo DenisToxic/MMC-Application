@@ -18,6 +18,10 @@ public class TelemetryIngestRequest
 
     public TestResult TestResult { get; set; } = TestResult.Running;
 
+    public bool Heartbeat { get; set; } = true;
+
+    public bool MaintenanceMode { get; set; }
+
     public string? AlarmCode { get; set; }
 
     public string? AlarmText { get; set; }

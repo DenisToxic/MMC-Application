@@ -1,10 +1,19 @@
+@using MMC_Backend.Models
 @model MMC_Backend.Models.DashboardViewModel
 @{
     Layout = null;
     var latest = Model.LatestTelemetry.FirstOrDefault();
     var activeAlarmCount = Model.ActiveAlarms.Count;
-    var statusClass = activeAlarmCount > 0 ? "status-alarm" : latest is null ? "status-idle" : "status-running";
-    var statusText = activeAlarmCount > 0 ? "Alarm" : latest is null ? "No data" : "Running";
+    var primaryState = Model.StationSummaries.FirstOrDefault()?.State;
+    var statusClass = primaryState switch
+    {
+        MachineState.Fault => "status-alarm",
+        MachineState.Offline => "status-idle",
+        MachineState.Maintenance => "status-maintenance",
+        MachineState.Running => "status-running",
+        _ => "status-idle"
+    };
+    var statusText = primaryState?.ToString() ?? "No data";
 }
 <!doctype html>
 <html lang="en">
@@ -165,6 +174,40 @@
                                 <td>@record.VibrationMmS.ToString("F1")</td>
                                 <td>@record.LoadPercent%</td>
                                 <td>@(record.AlarmCode ?? "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="section-title">
+                <h2>Production events</h2>
+                <span>State changes, alarms, reconnects</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Station</th>
+                            <th>Type</th>
+                            <th>Code</th>
+                            <th>State</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var evt in Model.RecentEvents)
+                        {
+                            <tr>
+                                <td>@evt.OccurredAtUtc.ToString("HH:mm:ss")</td>
+                                <td>@evt.StationId / @evt.DeviceId</td>
+                                <td>@evt.EventType</td>
+                                <td>@(evt.EventCode ?? "-")</td>
+                                <td>@(evt.NewState?.ToString() ?? "-")</td>
+                                <td>@evt.Message</td>
                             </tr>
                         }
                     </tbody>

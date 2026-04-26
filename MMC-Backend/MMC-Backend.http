@@ -17,6 +17,8 @@ Content-Type: application/json
   "vibrationMmS": 1.2,
   "loadPercent": 47,
   "testResult": "Pass",
+  "heartbeat": true,
+  "maintenanceMode": false,
   "alarmCode": null,
   "alarmText": null
 }
@@ -24,6 +26,16 @@ Content-Type: application/json
 ###
 
 GET {{MMC_Backend_HostAddress}}/api/telemetry/latest
+Accept: application/json
+
+###
+
+GET {{MMC_Backend_HostAddress}}/api/telemetry/states
+Accept: application/json
+
+###
+
+GET {{MMC_Backend_HostAddress}}/api/telemetry/events
 Accept: application/json
 
 ###

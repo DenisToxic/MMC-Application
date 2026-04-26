@@ -20,4 +20,10 @@ public class StationsController : ControllerBase
     {
         return _service.GetStationSummariesAsync(cancellationToken);
     }
+
+    [HttpGet("states")]
+    public Task<IReadOnlyList<StationState>> GetStates(CancellationToken cancellationToken)
+    {
+        return _service.GetCurrentStatesAsync(cancellationToken);
+    }
 }

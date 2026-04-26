@@ -49,6 +49,18 @@ public class TelemetryController : ControllerBase
         return _service.GetLatestAsync(cancellationToken);
     }
 
+    [HttpGet("states")]
+    public Task<IReadOnlyList<StationState>> GetStates(CancellationToken cancellationToken)
+    {
+        return _service.GetCurrentStatesAsync(cancellationToken);
+    }
+
+    [HttpGet("events")]
+    public Task<IReadOnlyList<ProductionEvent>> GetEvents([FromQuery] int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return _service.GetRecentEventsAsync(limit, cancellationToken);
+    }
+
     private static List<string> Validate(TelemetryIngestRequest? data)
     {
         var errors = new List<string>();

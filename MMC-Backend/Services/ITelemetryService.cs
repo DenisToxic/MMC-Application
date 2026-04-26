@@ -10,7 +10,11 @@ public interface ITelemetryService
 
     Task<IReadOnlyList<TelemetryRecord>> GetLatestAsync(CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<StationState>> GetCurrentStatesAsync(CancellationToken cancellationToken);
+
     Task<IReadOnlyList<AlarmState>> GetActiveAlarmsAsync(CancellationToken cancellationToken);
 
     Task<IReadOnlyList<StationSummary>> GetStationSummariesAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ProductionEvent>> GetRecentEventsAsync(int limit, CancellationToken cancellationToken);
 }

@@ -23,6 +23,7 @@ public class DashboardController : Controller
             LatestTelemetry = await _service.GetLatestAsync(cancellationToken),
             ActiveAlarms = await _service.GetActiveAlarmsAsync(cancellationToken),
             StationSummaries = await _service.GetStationSummariesAsync(cancellationToken),
+            RecentEvents = await _service.GetRecentEventsAsync(20, cancellationToken),
             RenderedAtUtc = DateTime.UtcNow
         };
 

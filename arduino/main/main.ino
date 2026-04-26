@@ -12,7 +12,7 @@
 #endif
 
 #ifndef SERVER_URL
-#define SERVER_URL "http://192.168.188.69:5000/api/telemetry"
+#define SERVER_URL "http://YOUR_BACKEND_IP:5000/api/telemetry"
 #endif
 
 const char* ssid = WIFI_SSID;
@@ -93,6 +93,8 @@ void sendTelemetry() {
   payload += "\"vibrationMmS\":" + String(generateVibration()) + ",";
   payload += "\"loadPercent\":" + String(generateLoad()) + ",";
   payload += "\"testResult\":\"" + generateTestResult() + "\",";
+  payload += "\"heartbeat\":true,";
+  payload += "\"maintenanceMode\":false,";
   payload += "\"alarmCode\":null,";
   payload += "\"alarmText\":null";
   payload += "}";
