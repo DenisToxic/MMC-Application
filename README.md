@@ -1,235 +1,248 @@
-# Industrial Test Cell Monitor
+# 🏭 Industrial Test Cell Monitoring System
 
-Portfolio prototype for an industrial production test cell. An ESP8266 sends live telemetry to an ASP.NET Core backend, the backend validates the device input, derives machine state, stores trace history in PostgreSQL, and exposes an operator dashboard plus REST APIs.
+A self-hosted **industrial telemetry and monitoring platform** designed to simulate and visualize a production test cell environment.
 
-This is intentionally framed as a small MES-style monitoring system, not a generic IoT sensor demo.
+This project demonstrates **embedded device integration, .NET backend development, and industrial-style data processing**, inspired by real-world automation and measurement systems.
 
-![Operator dashboard showing station state, alarms, station summary, and telemetry history](docs/screenshots/Dashboard.png)
+---
 
-![Production event history showing state changes and industrial events](docs/screenshots/Events.png)
+## ⚙️ Overview
 
-## What It Demonstrates
+This system represents a simplified **test cell monitoring setup**:
 
-- Real embedded device integration with ESP8266 over HTTP/JSON.
-- ASP.NET Core ingestion API with validation and domain rules.
-- PostgreSQL persistence with EF Core migrations.
-- Append-only telemetry history for production traceability.
-- Machine state model: `Offline`, `Idle`, `Running`, `Fault`, `Maintenance`.
-- Production event log for state changes, alarms, reconnects, threshold violations, and completed tests.
-- Latest-state cache so dashboard/API reads do not need to scan the full telemetry history.
+* 📟 Embedded device (ESP8266) simulates a machine
+* 🌐 ASP.NET Core backend ingests and processes telemetry
+* 🐘 PostgreSQL stores historical data
+* 🖥 Web dashboard visualizes system state in real-time
 
-## System Architecture
+The goal is to replicate core concepts found in:
 
-```text
-ESP8266 Test Cell Node
-     |
-     | HTTP JSON telemetry
-     v
-ASP.NET Core Ingestion API
-     |
-     +--> Input validation
-     +--> Threshold checks
-     +--> Machine state derivation
-     +--> Production event generation
-     |
-     v
-PostgreSQL
-     |
-     +--> telemetry_records    append-only telemetry history
-     +--> station_states       latest state cache
-     +--> production_events    audit/event history
-     |
-     v
-Operator Dashboard + REST API
-```
+* industrial automation systems
+* MES (Manufacturing Execution Systems)
+* machine monitoring & test environments
 
-## Industrial Semantics
+---
 
-The ESP8266 is treated as an untrusted data source. The backend is the validation authority: it accepts raw device telemetry, checks process thresholds, derives the authoritative machine state, writes append-only history, and maintains a latest-state cache for fast operator views.
-
-Telemetry answers: "What did the device report?"
-
-Station state answers: "What is the current authoritative state of the station?"
-
-Production events answer: "What important production or system event happened?"
-
-## Repository Layout
+## 🧱 System Architecture
 
 ```text
-MMC-Backend/          ASP.NET Core API, dashboard, EF Core model, migrations
-arduino/main/         ESP8266 telemetry sender
-scripts/             local demo tools
-docs/screenshots/    portfolio screenshots
+ESP8266 (Machine Simulation)
+        ↓ HTTP (JSON Telemetry)
+ASP.NET Core Backend (.NET 8)
+        ↓
+PostgreSQL (Telemetry Storage)
+        ↓
+Operator Dashboard (Razor UI)
 ```
 
-## Backend Stack
+---
 
-- .NET 8
-- ASP.NET Core MVC/API
-- Entity Framework Core
-- PostgreSQL
-- Swagger/OpenAPI
+## 🧩 Features
 
-## Data Model
+### 📡 Embedded Telemetry Source
 
-### `telemetry_records`
+* ESP8266 sends periodic machine data
+* Simulated industrial values:
 
-Append-only stream of raw telemetry and traceability values:
+  * temperature (°C)
+  * vibration (mm/s)
+  * load (%)
+* Includes uptime and cycle tracking
 
-- station ID
-- device ID
-- cycle count
-- uptime
-- temperature
-- vibration
-- load
-- test result
-- alarm code/text
-- device timestamp
-- backend receive timestamp
+---
 
-### `station_states`
+### 🧠 Backend Processing (.NET)
 
-Latest-state cache per station/device:
+* REST API for telemetry ingestion
+* Validation of incoming data (untrusted device input)
+* Structured domain model for industrial data
+* Service-based architecture
+* EF Core with PostgreSQL persistence
 
-- current machine state
-- latest telemetry record ID
-- last cycle count
-- last alarm code
-- last seen timestamp
+---
 
-### `production_events`
+### 📊 Industrial Data Model
 
-Audit-style event history:
+Each telemetry record includes:
 
-- state changes
-- alarm raised
-- threshold violations
-- test completed
-- device reconnects
+* `deviceId` – unique machine identifier
+* `stationId` – test station reference
+* `cycleCount` – production/test cycles
+* `uptimeMs` – device runtime
+* `temperatureC`, `vibrationMmS`, `loadPercent`
+* `testResult` – Pass / Fail / Running
+* `alarmCode`, `alarmText`
+* `timestamp`
 
-## API Examples
+---
 
-### Ingest Telemetry
+### 🖥 Operator Dashboard
 
-`POST /api/telemetry`
+* Live machine status
+* Latest telemetry values
+* Alarm display
+* Pass / Fail counters
+* Recent telemetry history
+* Device heartbeat / last seen tracking
+
+---
+
+### 🚨 Alarm & Validation System
+
+* Threshold-based alarm detection
+* Input validation (reject invalid payloads)
+* Clear API error responses (HTTP 400)
+
+---
+
+## 🔌 API Endpoints
+
+### Telemetry
+
+```
+POST /api/telemetry
+GET  /api/telemetry/latest
+GET  /api/telemetry/recent?limit=100
+```
+
+### System Overview
+
+```
+GET /api/stations/summary
+GET /api/alarms/active
+```
+
+---
+
+## 🚀 Getting Started
+
+### Requirements
+
+* .NET 8 SDK
+* PostgreSQL
+* ESP8266 (optional, but recommended)
+
+---
+
+### 1. Clone repository
+
+```bash
+git clone https://github.com/DenisToxic/MMC-Application.git
+cd MMC-Application
+```
+
+---
+
+### 2. Configure database
+
+Update `appsettings.Development.json`:
 
 ```json
 {
-  "deviceId": "ESP-001",
-  "stationId": "TEST-CELL-01",
-  "cycleCount": 42,
-  "uptimeMs": 12345,
-  "temperatureC": 24.8,
-  "vibrationMmS": 1.2,
-  "loadPercent": 47,
-  "testResult": "Pass",
-  "heartbeat": true,
-  "maintenanceMode": false,
-  "alarmCode": null,
-  "alarmText": null
+  "ConnectionStrings": {
+    "Default": "Host=localhost;Port=5432;Database=iotdb;Username=iotuser;Password=iotpass"
+  }
 }
 ```
 
-### Read APIs
+---
 
-```text
-GET /api/telemetry/recent
-GET /api/telemetry/latest
-GET /api/telemetry/states
-GET /api/telemetry/events
-GET /api/alarms/active
-GET /api/stations/summary
-GET /api/stations/states
-```
+### 3. Run migrations
 
-## Run Locally
-
-### 1. Configure PostgreSQL
-
-Set the connection string with user secrets or an environment variable.
-
-```powershell
-cd MMC-Backend
-dotnet user-secrets set "ConnectionStrings:TelemetryDatabase" "Host=localhost;Port=5432;Database=industrial_test_cell_monitor;Username=postgres;Password=YOUR_PASSWORD"
-```
-
-### 2. Apply Migrations
-
-```powershell
-dotnet tool restore
+```bash
 dotnet ef database update
 ```
 
-### 3. Start the Backend
+---
 
-```powershell
-dotnet run --launch-profile http
+### 4. Start backend
+
+```bash
+dotnet run
 ```
 
-Open:
+Swagger available at:
 
-```text
-http://localhost:5000/dashboard
-http://localhost:5000/swagger
+```
+https://localhost:xxxx/swagger
 ```
 
-## Demo Without ESP8266
+---
 
-Run the demo telemetry sender from the repository root:
+### 5. Configure ESP8266
 
-```powershell
-.\scripts\send-demo-telemetry.ps1 -BaseUrl "http://localhost:5000"
-```
-
-The script sends normal running telemetry, threshold violations, failed tests, and maintenance samples so the dashboard shows realistic state transitions and event history.
-
-Useful variants:
-
-```powershell
-.\scripts\send-demo-telemetry.ps1 -Cycles 60 -DelaySeconds 2
-.\scripts\send-demo-telemetry.ps1 -StationId "TEST-CELL-02" -DeviceId "ESP-DEMO-02"
-```
-
-## ESP8266 Setup
-
-1. Copy `arduino/main/secrets.example.h` to `arduino/main/secrets.h`.
-2. Set Wi-Fi credentials.
-3. Set `SERVER_URL` to your backend IP, for example:
+Update firmware endpoint:
 
 ```cpp
-#define SERVER_URL "http://YOUR_BACKEND_IP:5000/api/telemetry"
+const char* serverUrl = "http://YOUR_PC_IP:5000/api/telemetry";
 ```
 
-4. Flash `arduino/main/main.ino` to the ESP8266.
+Flash and run the device.
 
-The backend launch profile listens on `http://0.0.0.0:5000`, so another device on the same network can post telemetry to your machine.
+---
 
-Do not commit `arduino/main/secrets.h`. It is intentionally ignored by Git because it contains local Wi-Fi credentials.
+## 🧪 Testing
 
-## Portfolio Demo Flow
+* Send sample telemetry via Swagger or Postman
+* Verify data persistence in PostgreSQL
+* Check dashboard updates
+* Validate error handling with invalid payloads
 
-1. Start PostgreSQL and the backend.
-2. Open the dashboard.
-3. Run `scripts/send-demo-telemetry.ps1`.
-4. Show the dashboard changing from running to fault/maintenance.
-5. Open `/api/telemetry/events` to show the production event history.
-6. Flash the ESP8266 and show real hardware sending the same payload shape.
+---
 
-## Screenshot Checklist
+## 🔐 Security & Best Practices
 
-Current screenshots in `docs/screenshots/`:
+* Device input treated as **untrusted**
+* Validation enforced at API boundary
+* Secrets (WiFi, credentials) excluded via `.gitignore`
+* Clean repository structure (no build artifacts)
 
-- `Dashboard.png`
-- `Events.png`
+---
 
-Useful additional screenshots:
+## 🧠 Design Principles
 
-- `Swagger.png`
-- `EspSerialMonitor.png`
+### ⚙️ Separation of concerns
 
-These screenshots are the first thing a reviewer should see after the architecture overview.
+* Controllers → API layer
+* Services → business logic
+* Data → EF Core / persistence
 
-## Why This Is Industrially Relevant
+---
 
-Industrial monitoring systems are not just sensor dashboards. They need traceability, state semantics, validation boundaries, event history, and efficient current-state reads. This project implements those core ideas in a compact stack that maps well to .NET-based manufacturing and automation software.
+### 📡 Event-driven thinking (foundation)
+
+* telemetry ingestion → processing → storage
+* prepared for future event/alert system
+
+---
+
+### 🏭 Industrial mindset
+
+* traceability via timestamps & cycles
+* alarm-based system behavior
+* machine-centric data model
+
+---
+
+## 📌 Project Goal
+
+This project is designed as a **portfolio demonstration of industrial software engineering concepts**, including:
+
+* .NET backend development
+* embedded device integration
+* telemetry processing
+* monitoring & visualization systems
+* database-driven traceability
+
+---
+
+## 🧠 Summary
+
+This project showcases a **full-stack industrial monitoring system** combining:
+
+* embedded systems
+* backend engineering
+* data persistence
+* operator visualization
+
+It reflects real-world patterns used in **automation, testing, and manufacturing software systems**.
